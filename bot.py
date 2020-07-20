@@ -11,13 +11,21 @@ import filters
 from api import API, StatusCodes, TransTypes
 from filters.is_owner import IsOwnerFilter
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(message)s', datefmt='%d-%m-%yy %H:%M:%S')
+# Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(message)s',
+    datefmt='%d-%m-%yy %H:%M:%S'
+)
+
 logger = logging.getLogger(__name__)
+
 
 # Initialize bot, dispatcher and api
 bot = Bot(token=config.BOT_TOKEN, parse_mode='HTML')
 dp = Dispatcher(bot)
 api = API(config.API_TOKEN_PUBLIC, config.API_TOKEN_PRIVATE)
+
 
 # Setup filters
 filters.setup(dp)
@@ -35,6 +43,7 @@ async def generate_table(th, td):
 
 async def menu_markup():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row('Аккаунт')
     markup.row('Последние 5 платежей', '✅Последние 5 платежей')
     markup.row('Последние 10 платежей', '✅Последние 10 платежей')
     markup.row('Последние 25 платежей', '✅Последние 25 платежей')
@@ -49,7 +58,29 @@ async def _(message: types.Message):
     await message.answer(f'Welcome {message.from_user.full_name}', reply_markup=markup)
 
 
-@dp.message_handler(Text(contains=['Последние', 'платежей']), IsOwnerFilter())
+@dp.message_handler(Text(contains=['Аккаунт']), IsOwnerFilter())
+async def _(message: types.Message):
+    account_info = await api.get_account_info()
+    lock_withdraw_text = 'Да' if account_info.lock_withdrawal != 0 else 'Нет'
+    lock_account_text = 'Да' if account_info.lock_account != 0 else 'Нет'
+    text = [
+        '<b>Аккаунт</b>', '',
+        '<b>Баланс:</b>',
+        f'RUB: {account_info.balance_rub}',
+        f'USD: {account_info.balance_usd}',
+        f'UAH: {account_info.balance_uah}', '',
+        '<b>Задержка баланса:</b>',
+        f'RUB: {account_info.balance_on_hold_rub}',
+        f'USD: {account_info.balance_on_hold_usd}',
+        f'UAH: {account_info.balance_on_hold_uah}', '',
+        '<b>Доп. инфо:</b>',
+        f'Блокировка вывода: {lock_withdraw_text}',
+        f'Блокировка аккаунта: {lock_account_text}'
+    ]
+    await message.answer('\n'.join(text))
+
+
+@dp.message_handler(Text(contains=['Последние']), IsOwnerFilter())
 async def _(message: types.Message):
     text = f'<b>{message.text}</b>\n'
     markup = await menu_markup()
@@ -73,7 +104,9 @@ async def _(message: types.Message):
         logger.info(f'{message.from_user.full_name} ({message.from_user.username or message.from_user.id}) '
                     f'success get {message.text}')
     except Exception as e:
-        logger.error(e)
+        logger.info(f'{message.from_user.full_name} ({message.from_user.username or message.from_user.id}) '
+                    f'ERROR with get {message.text}')
+        logger.error(f'Error: {e}')
         await message.answer('<b>Что-то пошло не так🤷‍♂</b>', reply_markup=markup)
 
 

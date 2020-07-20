@@ -4,9 +4,10 @@ from typing import List, Union
 
 import aiohttp
 
-from api_types import Transaction
+from api_types import Transaction, AccountInfo
 
 TRANSACTIONS_HISTORY_ENDPOINT = 'https://merchant.betatransfer.io/api/history'
+ACCOUNT_INFO_ENDPOINT = 'https://merchant.betatransfer.io/api/account-info'
 
 
 class TransTypes(Enum):
@@ -37,6 +38,30 @@ class API:
             params = self._api_token_private
         sign = hashlib.md5(params.encode())
         return sign.hexdigest()
+
+    async def get_account_info(self) -> AccountInfo:
+        endpoint = ACCOUNT_INFO_ENDPOINT
+
+        sign_params = [self._api_token_public]
+        sign = await self.__generate_sing(sign_params)
+
+        params = {
+            'token': self._api_token_public,
+            'sign': sign
+        }
+
+        response = await self.__session.get(endpoint, params=params)
+        response_json = await response.json()
+        return AccountInfo(
+            balance_rub=response_json['balance']['RUB'],
+            balance_usd=response_json['balance']['USD'],
+            balance_uah=response_json['balance']['UAH'],
+            balance_on_hold_rub=response_json['balance_on_hold']['RUB'],
+            balance_on_hold_usd=response_json['balance_on_hold']['USD'],
+            balance_on_hold_uah=response_json['balance_on_hold']['UAH'],
+            lock_withdrawal=response_json['account']['lockWithdrawal'],
+            lock_account=response_json['account']['lockAccount']
+        )
 
     async def get_transactions_history(self, limit: int = None,
                                        t_type: Union[str, TransTypes] = None,
@@ -74,10 +99,10 @@ class API:
                 id=int(item['id']),
                 type=item['type'],
                 amount=float(item['amount']),
-                paymentSystem=item['paymentSystem'],
+                payment_system=item['paymentSystem'],
                 currency=item['currency'],
                 address=item['address'],
-                paymentCard=item['paymentCard'],
+                payment_card=item['paymentCard'],
                 status=item['status']
             ))
         return result
